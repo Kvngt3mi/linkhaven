@@ -124,10 +124,12 @@ Linkhaven
 // Linkhaven prototype wiring (no backend yet). Phase 2 replaces this with real sign-up, login and saving.
 (function () {
   var links = {
-    'Log in': 'auth.html', 'Sign up free': 'auth.html', 'Claim your handle': 'auth.html',
-    'Claim this handle': 'auth.html', 'Join Linkhaven Today': 'auth.html', 'Get Started': 'auth.html',
-    'Back to log in': 'auth.html', 'Go back': 'auth.html', 'Go to home page': 'index.html',
-    'Go to my dashboard': 'dashboard.html', 'Linkhaven': 'index.html',
+    'Log in': 'login.html', 'Sign up free': 'signup.html', 'Claim your handle': 'signup.html',
+    'Claim this handle': 'signup.html', 'Join Linkhaven Today': 'signup.html', 'Get Started': 'signup.html',
+    'Forgot password?': 'forgot-password.html', 'Forgot password': 'forgot-password.html',
+    'Check your email': 'check-email.html', 'Back to log in': 'login.html', 'Go back': 'signup.html',
+    'Back to home': 'index.html', 'Go to home page': 'index.html', 'Go to my dashboard': 'dashboard.html',
+    'Linkhaven': 'index.html',
     'Terms': 'legal.html#terms', 'Privacy': 'legal.html#privacy', 'Privacy Policy': 'legal.html#privacy',
     'Acceptable use': 'legal.html#acceptable-use', 'Report abuse': 'legal.html#report',
     'Links': 'dashboard.html', 'Appearance': 'appearance.html', 'Analytics': 'analytics.html', 'Settings': 'settings.html'
@@ -136,24 +138,22 @@ Linkhaven
     var t = a.textContent.trim();
     if (links[t]) a.setAttribute('href', links[t]);
   });
-  var buttons = { 'Create my page': 'onboarding.html', 'Log in': 'dashboard.html', 'Finish and see my page': 'onboarding.html' };
+  var buttons = { 'Create my page': 'check-email.html', 'Log in': 'dashboard.html', 'Send reset link': 'check-email.html', 'Finish and see my page': 'onboarding.html' };
   document.querySelectorAll('button').forEach(function (b) {
     var t = b.textContent.trim();
     if (buttons[t]) b.addEventListener('click', function () { location.href = buttons[t]; });
   });
-  // Home page: send the typed handle to sign-up
   var claim = document.querySelector('.claim');
   if (claim) {
     var go = function () {
       var v = (document.getElementById('handle') || {}).value || '';
-      location.href = 'auth.html' + (v ? '?handle=' + encodeURIComponent(v.trim()) : '');
+      location.href = 'signup.html' + (v ? '?handle=' + encodeURIComponent(v.trim()) : '');
     };
     var btn = claim.querySelector('button');
     if (btn) btn.addEventListener('click', go);
     var inp = document.getElementById('handle');
     if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
   }
-  // Sign-up: prefill handle from the home page
   var h = new URLSearchParams(location.search).get('handle');
   var sh = document.getElementById('sh');
   if (h && sh) sh.value = h;
