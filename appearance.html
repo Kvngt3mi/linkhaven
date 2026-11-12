@@ -187,6 +187,42 @@ a:hover{opacity:.8}
     var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) {} t.remove();
     return Promise.resolve();
   };
+  // ---- social icons ----
+  LH.socialPlatforms = [
+    { id: 'whatsapp', label: 'WhatsApp', ph: 'Phone number or wa.me link', p: '<path d="M3 21l1.7-5A9 9 0 1 1 8 19.3z"/><path d="M9.2 8.2c0 3.3 2.9 6.3 6.3 6.3l1.2-1.5-2.2-1.2-.9.8c-1.1-.5-2-1.4-2.5-2.5l.8-.9-1.2-2.2z"/>' },
+    { id: 'instagram', label: 'Instagram', ph: '@handle or link', p: '<rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17" cy="7" r="0.7"/>' },
+    { id: 'tiktok', label: 'TikTok', ph: '@handle or link', p: '<path d="M14 4v10.5a3.5 3.5 0 1 1-3.5-3.5M14 4c.4 2.4 2 4 4.5 4.2"/>' },
+    { id: 'x', label: 'X', ph: '@handle or link', p: '<path d="M5 4l14 16M19 4L5 20"/>' },
+    { id: 'youtube', label: 'YouTube', ph: '@channel or link', p: '<rect x="3" y="6" width="18" height="12" rx="4"/><path d="M10 9.5l5 2.5-5 2.5z"/>' },
+    { id: 'facebook', label: 'Facebook', ph: 'Page name or link', p: '<path d="M14 8h3V4.5h-3a4 4 0 0 0-4 4V11H7.5v3.5H10V21h3.5v-6.5H16l.5-3.5h-3V8.8c0-.5.3-.8.5-.8z"/>' },
+    { id: 'linkedin', label: 'LinkedIn', ph: 'Profile name or link', fill: true, p: '<rect x="4" y="9" width="3.4" height="11"/><circle cx="5.7" cy="5.3" r="1.9"/><path d="M10 9h3.2v1.6c.6-1.1 1.9-1.9 3.5-1.9 3 0 3.8 2 3.8 4.5V20h-3.4v-5.5c0-1.3-.3-2.3-1.7-2.3s-2 1-2 2.4V20H10z"/>' },
+    { id: 'telegram', label: 'Telegram', ph: '@username or link', p: '<path d="M21 4L3 11l6 2 2 6 3-4 5 3z"/>' },
+    { id: 'email', label: 'Email', ph: 'you@email.com', p: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>' },
+    { id: 'website', label: 'Website', ph: 'yoursite.com', p: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>' }
+  ];
+  LH.socialMap = {}; LH.socialPlatforms.forEach(function (x) { LH.socialMap[x.id] = x; });
+  LH.socialIcon = function (id, color, size) {
+    var x = LH.socialMap[id]; if (!x) return '';
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (x.fill ? color : 'none') + '" stroke="' + (x.fill ? 'none' : color) + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + x.p + '</svg>';
+  };
+  LH.socialHtml = function (list, color, size) {
+    return (list || []).filter(function (s) { return LH.socialMap[s.platform] && /^(https?:|mailto:|tel:)/i.test(s.url); }).map(function (s) {
+      return '<a href="' + LH.esc(s.url) + '" target="_blank" rel="noopener noreferrer nofollow" aria-label="' + LH.esc(LH.socialMap[s.platform].label) + '" style="display:flex;color:' + color + '">' + LH.socialIcon(s.platform, color, size) + '</a>';
+    }).join('');
+  };
+  LH.socialBuild = function (id, v) {
+    v = (v || '').trim(); if (!v) return '';
+    if (id === 'email') { v = v.replace(/^mailto:/i, ''); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? 'mailto:' + v : ''; }
+    if (id === 'whatsapp' && /^\+?[\d\s\-()]{7,}$/.test(v)) return 'https://wa.me/' + v.replace(/\D/g, '');
+    if (v.indexOf('/') < 0 && (v.charAt(0) === '@' || v.indexOf('.') < 0)) {
+      var h = v.replace(/^@/, '');
+      if (!/^[A-Za-z0-9_.\-]{1,60}$/.test(h)) return '';
+      var base = { instagram: 'https://instagram.com/', tiktok: 'https://www.tiktok.com/@', x: 'https://x.com/', youtube: 'https://youtube.com/@', facebook: 'https://facebook.com/', linkedin: 'https://www.linkedin.com/in/', telegram: 'https://t.me/' }[id];
+      if (base) return base + h;
+    }
+    var u = LH.normUrl(v); return /^https?:/i.test(u) ? u : '';
+  };
+
   // Show / Hide buttons next to password fields
   document.querySelectorAll('button').forEach(function (b) {
     if (b.textContent.trim() === 'Show') b.addEventListener('click', function () {
@@ -299,7 +335,7 @@ a:hover{opacity:.8}
 <script>
 (function () {
   if (!LH.uid) return;
-  var uid = LH.uid, T = LH.themes, profile = null, links = [], blob = null, blobUrl = null, removed = false, theme = 'lime-glow';
+  var uid = LH.uid, T = LH.themes, profile = null, links = [], socials = [], blob = null, blobUrl = null, removed = false, theme = 'lime-glow';
   var nameI = LH.$('an'), handleI = LH.$('ah'), bioI = LH.$('ab');
   if (!nameI) return;
   ['Buttons', 'Social icons'].forEach(function (t) {
@@ -326,7 +362,7 @@ a:hover{opacity:.8}
     scr.style.background = t.bg; scr.style.color = t.tx;
     var av = '<div style="width:78px;height:78px;border-radius:50%;background:' + (u ? 'url(\'' + esc(u) + '\') center/cover' : t.av) + ';border:3px solid ' + t.ab + ';display:flex;align-items:center;justify-content:center;font-family:\'Bricolage Grotesque\',sans-serif;font-weight:800;font-size:34px;color:#07281A">' + (u ? '' : esc(n[0].toUpperCase())) + '</div>';
     var pills = links.map(function (l) { return '<div style="width:100%;box-sizing:border-box;background:' + t.btn + ';color:' + t.bt + ';border:' + t.bd + ';box-shadow:' + t.sh + ';border-radius:999px;padding:13px 16px;text-align:center;font-weight:600;font-size:15px;overflow-wrap:anywhere">' + esc(l.title) + '</div>'; }).join('');
-    scr.innerHTML = av + '<div style="font-family:\'Bricolage Grotesque\',sans-serif;font-weight:800;font-size:22px">' + esc(n) + '</div><div style="font-size:14px;margin-bottom:8px;text-align:center">' + esc(bioI.value.trim()) + '</div>' + pills + '<div style="margin-top:14px;font-size:12px;font-weight:600">Made with Linkhaven</div>';
+    scr.innerHTML = av + '<div style="font-family:\'Bricolage Grotesque\',sans-serif;font-weight:800;font-size:22px">' + esc(n) + '</div><div style="font-size:14px;margin-bottom:8px;text-align:center">' + esc(bioI.value.trim()) + '</div>' + (socials.length ? '<div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:8px">' + LH.socialHtml(socials, t.tx, 22) + '</div>' : '') + pills + '<div style="margin-top:14px;font-size:12px;font-weight:600">Made with Linkhaven</div>';
   }
   function pick(t) {
     theme = t;
@@ -368,8 +404,8 @@ a:hover{opacity:.8}
       .catch(function (e) { LH.showErr(save, LH.friendly(e)); })
       .then(function () { save.disabled = false; save.style.opacity = '1'; });
   });
-  Promise.all([LH.loadProfile(), LH.rest('GET', 'links?user_id=eq.' + uid + '&is_active=eq.true&order=position.asc')]).then(function (r) {
-    profile = r[0]; links = r[1]; if (!profile) return LH.showErr(save, 'We could not find your profile.');
+  Promise.all([LH.loadProfile(), LH.rest('GET', 'links?user_id=eq.' + uid + '&is_active=eq.true&order=position.asc'), LH.rest('GET', 'social_links?user_id=eq.' + uid + '&order=position.asc').catch(function () { return []; })]).then(function (r) {
+    profile = r[0]; links = r[1]; socials = r[2]; if (!profile) return LH.showErr(save, 'We could not find your profile.');
     fill();
   }).catch(function (e) { LH.showErr(save, LH.friendly(e)); });
 })();
