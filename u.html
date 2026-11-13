@@ -203,11 +203,36 @@ a:hover{opacity:.8}
   LH.socialMap = {}; LH.socialPlatforms.forEach(function (x) { LH.socialMap[x.id] = x; });
   LH.socialIcon = function (id, color, size) {
     var x = LH.socialMap[id]; if (!x) return '';
-    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (x.fill ? color : 'none') + '" stroke="' + (x.fill ? 'none' : color) + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + x.p + '</svg>';
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (x.fill ? color : 'none') + '" stroke="' + (x.fill ? 'none' : color) + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" shape-rendering="geometricPrecision" aria-hidden="true">' + x.p + '</svg>';
   };
-  LH.socialHtml = function (list, color, size) {
+  LH.brand = { whatsapp: '#25D366', instagram: '#E4405F', tiktok: '#010101', x: '#000000', youtube: '#FF0000', facebook: '#1877F2', linkedin: '#0A66C2', telegram: '#26A5E4', email: '#5B6B7A', website: '#0F766E' };
+  LH.socialStyles = [['plain', 'Plain'], ['soft', 'Soft circle'], ['solid', 'Solid circle'], ['outline', 'Outline'], ['brand', 'Brand colors'], ['brand-outline', 'Brand outline']];
+  // true when the given TEXT colour is light, meaning the page behind it is dark
+  LH.onDark = function (hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return false;
+    var n = parseInt(m[1], 16);
+    return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 150;
+  };
+  // o: { style, color (page text colour), soc (soft circle fill), dark (page is dark), size }
+  LH.socialHtml = function (list, o) {
+    o = o || {};
+    var st = o.style || 'plain', size = o.size || 32, col = o.color || '#07281A', dark = !!o.dark, soc = o.soc || 'rgba(255,255,255,0.55)';
+    var d = Math.round(size * 1.45), g = Math.round(size * 0.72);
+    var lightGlyph = dark ? '#07281A' : '#F4F1E4';
     return (list || []).filter(function (s) { return LH.socialMap[s.platform] && /^(https?:|mailto:|tel:)/i.test(s.url); }).map(function (s) {
-      return '<a href="' + LH.esc(s.url) + '" target="_blank" rel="noopener noreferrer nofollow" aria-label="' + LH.esc(LH.socialMap[s.platform].label) + '" style="display:flex;color:' + color + '">' + LH.socialIcon(s.platform, color, size) + '</a>';
+      var b = LH.brand[s.platform] || col;
+      if (dark && (b === '#010101' || b === '#000000')) b = '#FFFFFF';
+      var bgcss = '', glyph = col, gs = g;
+      if (st === 'plain') { gs = size; }
+      else if (st === 'soft') { bgcss = 'background:' + soc + ';'; }
+      else if (st === 'solid') { bgcss = 'background:' + col + ';'; glyph = lightGlyph; }
+      else if (st === 'outline') { bgcss = 'border:2px solid ' + col + ';box-sizing:border-box;'; }
+      else if (st === 'brand') {
+        bgcss = 'background:' + (s.platform === 'instagram' ? 'linear-gradient(45deg,#FEDA75,#FA7E1E,#D62976,#962FBF,#4F5BD5)' : b) + ';';
+        glyph = b === '#FFFFFF' ? '#07281A' : '#FFFFFF';
+      } else if (st === 'brand-outline') { bgcss = 'border:2px solid ' + b + ';box-sizing:border-box;'; glyph = b; }
+      var box = st === 'plain' ? '' : 'width:' + d + 'px;height:' + d + 'px;border-radius:50%;' + bgcss;
+      return '<a href="' + LH.esc(s.url) + '" target="_blank" rel="noopener noreferrer nofollow" aria-label="' + LH.esc(LH.socialMap[s.platform].label) + '" style="display:flex;align-items:center;justify-content:center;color:' + glyph + ';' + box + '">' + LH.socialIcon(s.platform, glyph, gs) + '</a>';
     }).join('');
   };
   LH.socialBuild = function (id, v) {
@@ -266,6 +291,7 @@ a:hover{opacity:.8}
   LH.rest('GET', 'profiles?handle=eq.' + encodeURIComponent(h) + '&select=*').then(function (a) {
     if (!a.length) return notFound();
     var p = a[0];
+    if (p.suspended) return notFound('This page is no longer available.');
     return Promise.all([LH.rest('GET', 'links?user_id=eq.' + p.id + '&is_active=eq.true&order=position.asc,created_at.asc'), LH.rest('GET', 'social_links?user_id=eq.' + p.id + '&order=position.asc').catch(function () { return []; })]).then(function (r) { render(p, r[0], r[1]); track(p); });
   }).catch(function () { notFound('We could not load this page. Please try again.'); });
 
@@ -283,7 +309,7 @@ a:hover{opacity:.8}
     tb.appendChild(el('div', 'font-size:15px;opacity:0.85;margin-top:2px', '@' + p.handle));
     if (p.bio) tb.appendChild(el('div', 'font-size:16px;margin-top:8px;white-space:pre-line', p.bio));
     col.appendChild(tb);
-    if (so && so.length) { var row = el('div', 'display:flex;gap:22px;flex-wrap:wrap;justify-content:center;margin:2px 0 8px'); row.innerHTML = LH.socialHtml(so, t.tx, 32); col.appendChild(row); }
+    if (so && so.length) { var row = el('div', 'display:flex;gap:22px;flex-wrap:wrap;justify-content:center;margin:2px 0 8px'); row.innerHTML = LH.socialHtml(so, { style: p.social_style, color: t.tx, soc: t.soc, dark: LH.onDark(t.tx), size: 32 }); col.appendChild(row); }
     ls.forEach(function (l) {
       if (!/^(https?:|mailto:|tel:)/i.test(l.url)) return;
       var a = el('a', 'width:100%;box-sizing:border-box;text-align:center;padding:16px 20px;border-radius:999px;background:' + t.btn + ';color:' + t.bt + ';border:' + t.bd + ';box-shadow:' + t.sh + ';font-weight:600;font-size:16px;text-decoration:none', l.title, { href: l.url, target: '_blank', rel: 'noopener noreferrer nofollow' });

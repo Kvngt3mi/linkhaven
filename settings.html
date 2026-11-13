@@ -203,11 +203,36 @@ a:hover{opacity:.8}
   LH.socialMap = {}; LH.socialPlatforms.forEach(function (x) { LH.socialMap[x.id] = x; });
   LH.socialIcon = function (id, color, size) {
     var x = LH.socialMap[id]; if (!x) return '';
-    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (x.fill ? color : 'none') + '" stroke="' + (x.fill ? 'none' : color) + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + x.p + '</svg>';
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (x.fill ? color : 'none') + '" stroke="' + (x.fill ? 'none' : color) + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" shape-rendering="geometricPrecision" aria-hidden="true">' + x.p + '</svg>';
   };
-  LH.socialHtml = function (list, color, size) {
+  LH.brand = { whatsapp: '#25D366', instagram: '#E4405F', tiktok: '#010101', x: '#000000', youtube: '#FF0000', facebook: '#1877F2', linkedin: '#0A66C2', telegram: '#26A5E4', email: '#5B6B7A', website: '#0F766E' };
+  LH.socialStyles = [['plain', 'Plain'], ['soft', 'Soft circle'], ['solid', 'Solid circle'], ['outline', 'Outline'], ['brand', 'Brand colors'], ['brand-outline', 'Brand outline']];
+  // true when the given TEXT colour is light, meaning the page behind it is dark
+  LH.onDark = function (hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return false;
+    var n = parseInt(m[1], 16);
+    return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 150;
+  };
+  // o: { style, color (page text colour), soc (soft circle fill), dark (page is dark), size }
+  LH.socialHtml = function (list, o) {
+    o = o || {};
+    var st = o.style || 'plain', size = o.size || 32, col = o.color || '#07281A', dark = !!o.dark, soc = o.soc || 'rgba(255,255,255,0.55)';
+    var d = Math.round(size * 1.45), g = Math.round(size * 0.72);
+    var lightGlyph = dark ? '#07281A' : '#F4F1E4';
     return (list || []).filter(function (s) { return LH.socialMap[s.platform] && /^(https?:|mailto:|tel:)/i.test(s.url); }).map(function (s) {
-      return '<a href="' + LH.esc(s.url) + '" target="_blank" rel="noopener noreferrer nofollow" aria-label="' + LH.esc(LH.socialMap[s.platform].label) + '" style="display:flex;color:' + color + '">' + LH.socialIcon(s.platform, color, size) + '</a>';
+      var b = LH.brand[s.platform] || col;
+      if (dark && (b === '#010101' || b === '#000000')) b = '#FFFFFF';
+      var bgcss = '', glyph = col, gs = g;
+      if (st === 'plain') { gs = size; }
+      else if (st === 'soft') { bgcss = 'background:' + soc + ';'; }
+      else if (st === 'solid') { bgcss = 'background:' + col + ';'; glyph = lightGlyph; }
+      else if (st === 'outline') { bgcss = 'border:2px solid ' + col + ';box-sizing:border-box;'; }
+      else if (st === 'brand') {
+        bgcss = 'background:' + (s.platform === 'instagram' ? 'linear-gradient(45deg,#FEDA75,#FA7E1E,#D62976,#962FBF,#4F5BD5)' : b) + ';';
+        glyph = b === '#FFFFFF' ? '#07281A' : '#FFFFFF';
+      } else if (st === 'brand-outline') { bgcss = 'border:2px solid ' + b + ';box-sizing:border-box;'; glyph = b; }
+      var box = st === 'plain' ? '' : 'width:' + d + 'px;height:' + d + 'px;border-radius:50%;' + bgcss;
+      return '<a href="' + LH.esc(s.url) + '" target="_blank" rel="noopener noreferrer nofollow" aria-label="' + LH.esc(LH.socialMap[s.platform].label) + '" style="display:flex;align-items:center;justify-content:center;color:' + glyph + ';' + box + '">' + LH.socialIcon(s.platform, glyph, gs) + '</a>';
     }).join('');
   };
   LH.socialBuild = function (id, v) {
@@ -328,6 +353,12 @@ a:hover{opacity:.8}
     lo.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:18px;font-weight:500;color:#C23A22';
     lo.addEventListener('click', function (e) { e.preventDefault(); LH.signOut().then(function () { location.href = 'index.html'; }); });
     set.parentElement.appendChild(lo);
+    LH.rest('POST', 'rpc/is_admin', {}).then(function (ok) {
+      if (ok !== true) return;
+      var ad = document.createElement('a'); ad.href = 'admin.html'; ad.textContent = 'Admin';
+      ad.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:18px;font-weight:600;color:#1E7A32';
+      set.parentElement.insertBefore(ad, lo);
+    }).catch(function () {});
   }
   LH.loadProfile().then(function (p) { if (!p) return; var n = p.display_name || p.handle; LH.leaf('Y').forEach(function (a) { if (a.offsetWidth < 60) a.textContent = (n[0] || 'Y').toUpperCase(); }); }).catch(function () {});
 })();
@@ -418,7 +449,7 @@ a:hover{opacity:.8}
 
 (function () {
   if (!LH.uid) return;
-  var uid = LH.uid, esc = LH.esc, rows = [];
+  var uid = LH.uid, esc = LH.esc, rows = [], style = 'plain';
   var acc = [].slice.call(document.querySelectorAll('h2')).filter(function (h) { return h.textContent.trim() === 'Account'; })[0];
   if (!acc) return;
   var GL = 'background:rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.95);box-shadow:0 16px 40px rgba(10,61,31,0.10);backdrop-filter:blur(14px);';
@@ -426,22 +457,28 @@ a:hover{opacity:.8}
   var card = document.createElement('div');
   card.style.cssText = GL + 'border-radius:28px;padding:28px;display:flex;flex-direction:column;gap:18px;box-sizing:border-box';
   card.innerHTML = '<div><h2 style="margin:0;font-family:\'Bricolage Grotesque\',sans-serif;font-weight:800;font-size:26px;letter-spacing:-0.01em">Social icons</h2><p style="margin:2px 0 0;color:#3B5A45;font-size:16px">Pick the platforms you use and add your links. They show as icons under your bio.</p></div>'
-    + '<div id="so-chips" style="display:flex;gap:10px;flex-wrap:wrap"></div><div id="so-rows" style="display:flex;flex-direction:column;gap:12px"></div>'
+    + '<div id="so-chips" style="display:flex;gap:10px;flex-wrap:wrap"></div><div id="so-rows" style="display:flex;flex-direction:column;gap:12px"></div><div style="border-top:1px solid rgba(7,40,26,0.10);padding-top:16px"><div style="font-weight:600;margin-bottom:10px">Icon style</div><div id="so-styles" style="display:flex;gap:10px;flex-wrap:wrap"></div></div>'
     + '<div style="display:flex;justify-content:flex-end"><button id="so-save" style="border:0;cursor:pointer;display:flex;align-items:center;gap:10px;background:linear-gradient(180deg,#D4FF4A,#9BE21A);box-shadow:0 0 0 2px #7CCB12,0 10px 26px rgba(155,226,26,0.5);padding:14px 26px;border-radius:999px;font-family:inherit;font-size:16px;font-weight:600;color:#07281A">Save social icons</button></div>';
   acc.parentElement.parentElement.insertAdjacentElement('afterend', card);
-  var chips = card.querySelector('#so-chips'), list = card.querySelector('#so-rows'), saveB = card.querySelector('#so-save');
+  var chips = card.querySelector('#so-chips'), list = card.querySelector('#so-rows'), saveB = card.querySelector('#so-save'), styles = card.querySelector('#so-styles');
   function sync() { [].slice.call(list.querySelectorAll('input')).forEach(function (i) { var r = rows.filter(function (x) { return x.platform === i.getAttribute('data-p'); })[0]; if (r) r.url = i.value; }); }
   function paint() {
     var used = rows.map(function (r) { return r.platform; });
     chips.innerHTML = LH.socialPlatforms.filter(function (p) { return used.indexOf(p.id) < 0; }).map(function (p) {
       return '<button data-add="' + p.id + '" style="display:flex;align-items:center;gap:8px;border:1px solid #C3D6C7;background:rgba(255,255,255,0.85);padding:9px 16px 9px 12px;border-radius:999px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;color:#07281A">' + LH.socialIcon(p.id, '#07281A', 20) + p.label + '</button>';
     }).join('') || '<div style="color:#3B5A45">You have added every platform.</div>';
+    var sample = (rows.length ? rows.map(function (r) { return { platform: r.platform, url: 'https://x.co' }; }) : [{ platform: 'instagram', url: 'https://x.co' }, { platform: 'whatsapp', url: 'https://x.co' }, { platform: 'youtube', url: 'https://x.co' }]).slice(0, 4);
+    styles.innerHTML = LH.socialStyles.map(function (s) {
+      var on = s[0] === style;
+      return '<button data-style="' + s[0] + '" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 14px;border-radius:18px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;color:#07281A;background:' + (on ? 'rgba(178,241,27,0.35)' : 'rgba(255,255,255,0.85)') + ';border:' + (on ? '2px solid #07281A' : '1px solid #C3D6C7') + '"><span style="display:flex;gap:6px;pointer-events:none">' + LH.socialHtml(sample, { style: s[0], size: 20, color: '#07281A', soc: '#DDE9D3' }).replace(/<a /g, '<span ').replace(/<\/a>/g, '</span>').replace(/ href="[^"]*"| target="[^"]*"| rel="[^"]*"/g, '') + '</span>' + s[1] + '</button>';
+    }).join('');
     list.innerHTML = rows.length ? rows.map(function (r) {
       var p = LH.socialMap[r.platform];
       return '<div style="display:flex;align-items:center;gap:12px"><span style="flex:none;width:44px;height:44px;border-radius:50%;background:#DDE9D3;display:flex;align-items:center;justify-content:center">' + LH.socialIcon(r.platform, '#07281A', 22) + '</span><input data-p="' + r.platform + '" type="text" aria-label="' + esc(p.label) + ' link" placeholder="' + esc(p.ph) + '" value="' + esc(r.url) + '" style="' + INP + '"><button data-rm="' + r.platform + '" aria-label="Remove ' + esc(p.label) + '" style="flex:none;width:40px;height:40px;border-radius:50%;border:1px solid #C3D6C7;background:#fff;cursor:pointer;font-size:20px;line-height:1;color:#07281A">×</button></div>';
     }).join('') : '<div style="color:#3B5A45">Choose a platform above to add it.</div>';
   }
   card.addEventListener('click', function (e) {
+    var sb = e.target.closest('[data-style]'); if (sb) { sync(); style = sb.getAttribute('data-style'); paint(); return; }
     var a = e.target.closest('[data-add]'), r = e.target.closest('[data-rm]');
     if (a) { sync(); rows.push({ platform: a.getAttribute('data-add'), url: '' }); paint(); var i = list.querySelector('input[data-p="' + a.getAttribute('data-add') + '"]'); if (i) i.focus(); }
     if (r) { sync(); rows = rows.filter(function (x) { return x.platform !== r.getAttribute('data-rm'); }); paint(); }
@@ -456,11 +493,12 @@ a:hover{opacity:.8}
       out.push({ user_id: uid, platform: r.platform, url: u, position: i });
     }
     LH.showErr(saveB, ''); saveB.disabled = true; saveB.style.opacity = '0.6';
-    LH.rest('DELETE', 'social_links?user_id=eq.' + uid).then(function () { return out.length ? LH.rest('POST', 'social_links', out) : null; })
+    LH.rest('PATCH', 'profiles?id=eq.' + uid, { social_style: style }).then(function () { return LH.rest('DELETE', 'social_links?user_id=eq.' + uid); }).then(function () { return out.length ? LH.rest('POST', 'social_links', out) : null; })
       .then(function () { rows = out.map(function (x) { return { platform: x.platform, url: x.url }; }); paint(); LH.showErr(saveB, 'Saved. Your icons show under your bio.', true); })
-      .catch(function (err) { LH.showErr(saveB, err.status === 404 ? 'Social icons are not set up yet. Run the third SQL file in Supabase.' : LH.friendly(err)); })
+      .catch(function (err) { LH.showErr(saveB, (err.status === 404 || /social_style/.test(err.message)) ? 'Social icons are not set up yet. Run the SQL update file in Supabase.' : LH.friendly(err)); })
       .then(function () { saveB.disabled = false; saveB.style.opacity = '1'; });
   });
+  LH.loadProfile().then(function (p) { if (p && p.social_style) { style = p.social_style; paint(); } }).catch(function () {});
   LH.rest('GET', 'social_links?user_id=eq.' + uid + '&order=position.asc').then(function (a) { rows = a.map(function (x) { return { platform: x.platform, url: x.url }; }); paint(); })
     .catch(function () { paint(); });
   paint();

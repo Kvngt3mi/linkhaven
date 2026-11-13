@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin – Linkhaven</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&amp;family=Figtree:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+a:hover{opacity:.8}
+.glass{background:rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.95);box-shadow:0 20px 50px rgba(10,61,31,0.12);backdrop-filter:blur(14px)}
+.chev{display:flex}
+@media (max-width:820px){.chev{display:none}}
+@media (max-width:700px){.nl{display:none}.navpill{padding-left:16px !important;gap:16px !important}}
+@media (max-width:560px){.claim{flex-wrap:wrap !important;border-radius:28px !important;padding:14px !important}.claim button{width:100%;justify-content:center}.claim>svg{display:none}.stepspanel{padding:28px 22px !important}}
+</style>
+</head>
+<body>
+<div style="position:relative;overflow:hidden;min-height:100vh;color:#07281A;font-family:'Figtree',sans-serif;font-size:17px;line-height:1.5;background:radial-gradient(1000px 650px at 85% 6%,#DDF7AE 0%,rgba(221,247,174,0) 60%),radial-gradient(800px 600px at 0% 20%,#E4F1D6 0%,rgba(228,241,214,0) 60%),#F1F6E6"><div id="app"></div></div>
+<script>
+// Linkhaven core: talks to Supabase using plain fetch. The key below is the public (publishable) key.
+(function () {
+  var LH = window.LH = {};
+  LH.url = 'https://vjpnaxulswqrogjlknls.supabase.co';
+  LH.key = 'sb_publishable_hR7ZtlFR__pr7HOODN-blQ_XLYB0Cr0';
+  var SKEY = 'lh_session';
+
+  LH.$ = function (id) { return document.getElementById(id); };
+  LH.esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+  LH.btn = function (text) {
+    return [].slice.call(document.querySelectorAll('button,a')).filter(function (b) { return b.textContent.trim() === text; })[0] || null;
+  };
+  LH.leaf = function (text) {
+    return [].slice.call(document.querySelectorAll('div,span,b')).filter(function (d) { return d.children.length === 0 && d.textContent.trim() === text; });
+  };
+  LH.replaceText = function (root, from, to) {
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n;
+    while ((n = w.nextNode())) { if (n.nodeValue.indexOf(from) > -1) n.nodeValue = n.nodeValue.split(from).join(to); }
+  };
+
+  // ---- session ----
+  LH.session = function () { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch (e) { return null; } };
+  LH.save = function (s) {
+    if (!s) { localStorage.removeItem(SKEY); return; }
+    var exp = s.expires_at || (s.expires_in ? Math.floor(Date.now() / 1000) + s.expires_in : 0);
+    localStorage.setItem(SKEY, JSON.stringify({
+      access_token: s.access_token, refresh_token: s.refresh_token, expires_at: exp,
+      user: s.user ? { id: s.user.id, email: s.user.email } : (LH.session() || {}).user
+    }));
+  };
+
+  // ---- errors ----
+  LH.msg = function (j) { return (j && (j.msg || j.error_description || j.message || j.error)) || ''; };
+  LH.friendly = function (e) {
+    var m = ((e && e.message) || '').toLowerCase();
+    if (m.indexOf('already registered') > -1 || m.indexOf('already exists') > -1) return 'That email already has an account. Try logging in.';
+    if (m.indexOf('invalid login') > -1) return 'Wrong email or password.';
+    if (m.indexOf('not confirmed') > -1) return 'Please confirm your email first. Check your inbox.';
+    if (m.indexOf('password') > -1 && m.indexOf('at least') > -1) return 'Use at least 8 characters for your password.';
+    if (m.indexOf('database error') > -1) return 'That handle may have just been taken. Try another one.';
+    if (m.indexOf('rate limit') > -1 || (e && e.status === 429)) return 'Too many attempts. Please wait a few minutes and try again.';
+    if (m.indexOf('failed to fetch') > -1 || m.indexOf('network') > -1) return 'No connection. Check your internet and try again.';
+    return (e && e.message) || 'Something went wrong. Please try again.';
+  };
+  LH.showErr = function (before, text, good) {
+    var d = before.previousElementSibling;
+    if (!d || !d.classList || !d.classList.contains('lh-msg')) {
+      d = document.createElement('div'); d.className = 'lh-msg';
+      d.style.cssText = 'font-size:15px;font-weight:600;line-height:1.4';
+      before.parentNode.insertBefore(d, before);
+    }
+    d.style.color = good ? '#1E7A32' : '#C23A22';
+    d.textContent = text || '';
+    d.style.display = text ? 'block' : 'none';
+  };
+
+  // ---- network ----
+  LH.headers = function (token, extra) {
+    var h = { 'apikey': LH.key, 'Content-Type': 'application/json' };
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    for (var k in (extra || {})) h[k] = extra[k];
+    return h;
+  };
+  function jfetch(path, opts) {
+    return fetch(LH.url + path, opts).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {}
+        if (!r.ok) { var err = new Error(LH.msg(j) || ('Request failed (' + r.status + ')')); err.status = r.status; err.body = j; throw err; }
+        return { body: j, res: r };
+      });
+    });
+  }
+  LH.token = function () {
+    var s = LH.session();
+    if (!s) return Promise.resolve(null);
+    if (s.expires_at && s.expires_at - 60 > Math.floor(Date.now() / 1000)) return Promise.resolve(s.access_token);
+    return jfetch('/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: LH.headers(), body: JSON.stringify({ refresh_token: s.refresh_token }) })
+      .then(function (r) { LH.save(r.body); return r.body.access_token; })
+      .catch(function () { LH.save(null); return null; });
+  };
+  // method, path (after /rest/v1/), JSON body, optional Prefer header
+  LH.rest = function (method, path, body, prefer) {
+    return LH.token().then(function (t) {
+      return jfetch('/rest/v1/' + path, { method: method, headers: LH.headers(t, prefer ? { Prefer: prefer } : null), body: body === undefined ? undefined : JSON.stringify(body) });
+    }).then(function (r) { return r.body; });
+  };
+  LH.count = function (path) {
+    return LH.token().then(function (t) {
+      return fetch(LH.url + '/rest/v1/' + path, { headers: LH.headers(t, { Prefer: 'count=exact', Range: '0-0' }) }).then(function (r) {
+        var n = parseInt((r.headers.get('content-range') || '').split('/')[1], 10);
+        return isNaN(n) ? 0 : n;
+      });
+    });
+  };
+
+  // ---- auth ----
+  LH.signUp = function (email, pw, handle) {
+    return jfetch('/auth/v1/signup', { method: 'POST', headers: LH.headers(), body: JSON.stringify({ email: email, password: pw, data: { handle: handle } }) })
+      .then(function (r) { if (r.body && r.body.access_token) { LH.save(r.body); return { session: true }; } return { session: false }; });
+  };
+  LH.signIn = function (email, pw) {
+    return jfetch('/auth/v1/token?grant_type=password', { method: 'POST', headers: LH.headers(), body: JSON.stringify({ email: email, password: pw }) })
+      .then(function (r) { LH.save(r.body); return r.body; });
+  };
+  LH.signOut = function () {
+    return LH.token().then(function (t) {
+      LH.save(null);
+      if (!t) return;
+      return fetch(LH.url + '/auth/v1/logout', { method: 'POST', headers: LH.headers(t) }).catch(function () {});
+    });
+  };
+  LH.recover = function (email) { return jfetch('/auth/v1/recover', { method: 'POST', headers: LH.headers(), body: JSON.stringify({ email: email }) }); };
+  LH.resend = function (email) { return jfetch('/auth/v1/resend', { method: 'POST', headers: LH.headers(), body: JSON.stringify({ type: 'signup', email: email }) }); };
+  LH.setPassword = function (token, pw) { return jfetch('/auth/v1/user', { method: 'PUT', headers: LH.headers(token), body: JSON.stringify({ password: pw }) }); };
+
+  // ---- storage ----
+  LH.uploadAvatar = function (blob, uid) {
+    return LH.token().then(function (t) {
+      var path = uid + '/avatar.jpg';
+      return fetch(LH.url + '/storage/v1/object/avatars/' + path, { method: 'POST', headers: { apikey: LH.key, Authorization: 'Bearer ' + t, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: blob })
+        .then(function (r) { if (!r.ok) throw new Error('Photo upload failed. Try a smaller picture.'); return LH.url + '/storage/v1/object/public/avatars/' + path + '?v=' + Date.now(); });
+    });
+  };
+  LH.resize = function (file, max) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image(), u = URL.createObjectURL(file);
+      img.onload = function () {
+        var s = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(function (b) { URL.revokeObjectURL(u); b ? resolve(b) : reject(new Error('Could not read that picture.')); }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function () { reject(new Error('Could not read that picture.')); };
+      img.src = u;
+    });
+  };
+
+  // ---- helpers ----
+  LH.reserved = ['admin','api','app','auth','dashboard','login','logout','signup','settings','appearance','analytics','legal','terms','privacy','report','support','help','about','pricing','feedback','assets','static','www','linkhaven','index','onboarding','forgot-password','check-email','profile'];
+  LH.checkHandle = function (v) {
+    if (!/^[a-z0-9_.]{3,30}$/.test(v)) return 'Use 3 to 30 letters, numbers, dots or underscores.';
+    if (LH.reserved.indexOf(v) > -1) return 'That name is reserved. Try another one.';
+    return '';
+  };
+  LH.normUrl = function (u) {
+    u = (u || '').trim();
+    if (!u) return '';
+    if (!/^(https?:\/\/|mailto:|tel:)/i.test(u)) u = (u.indexOf('@') > 0 && !/[\/\s]/.test(u)) ? 'mailto:' + u : 'https://' + u;
+    if (/^https?:/i.test(u)) { try { new URL(u); } catch (e) { return ''; } }
+    return u.length > 2000 ? '' : u;
+  };
+  LH.device = function () {
+    var ua = navigator.userAgent || '';
+    if (/iPad|Tablet/i.test(ua)) return 'tablet';
+    if (/Mobi|Android|iPhone/i.test(ua)) return 'mobile';
+    return ua ? 'desktop' : 'unknown';
+  };
+  LH.pageUrl = function (handle) { return location.origin + '/u.html?h=' + encodeURIComponent(handle); };
+  LH.copy = function (text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+    var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) {} t.remove();
+    return Promise.resolve();
+  };
+  // ---- social icons ----
+  LH.socialPlatforms = [
+    { id: 'whatsapp', label: 'WhatsApp', ph: 'Phone number or wa.me link', p: '<path d="M3 21l1.7-5A9 9 0 1 1 8 19.3z"/><path d="M9.2 8.2c0 3.3 2.9 6.3 6.3 6.3l1.2-1.5-2.2-1.2-.9.8c-1.1-.5-2-1.4-2.5-2.5l.8-.9-1.2-2.2z"/>' },
+    { id: 'instagram', label: 'Instagram', ph: '@handle or link', p: '<rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17" cy="7" r="0.7"/>' },
+    { id: 'tiktok', label: 'TikTok', ph: '@handle or link', p: '<path d="M14 4v10.5a3.5 3.5 0 1 1-3.5-3.5M14 4c.4 2.4 2 4 4.5 4.2"/>' },
+    { id: 'x', label: 'X', ph: '@handle or link', p: '<path d="M5 4l14 16M19 4L5 20"/>' },
+    { id: 'youtube', label: 'YouTube', ph: '@channel or link', p: '<rect x="3" y="6" width="18" height="12" rx="4"/><path d="M10 9.5l5 2.5-5 2.5z"/>' },
+    { id: 'facebook', label: 'Facebook', ph: 'Page name or link', p: '<path d="M14 8h3V4.5h-3a4 4 0 0 0-4 4V11H7.5v3.5H10V21h3.5v-6.5H16l.5-3.5h-3V8.8c0-.5.3-.8.5-.8z"/>' },
+    { id: 'linkedin', label: 'LinkedIn', ph: 'Profile name or link', fill: true, p: '<rect x="4" y="9" width="3.4" height="11"/><circle cx="5.7" cy="5.3" r="1.9"/><path d="M10 9h3.2v1.6c.6-1.1 1.9-1.9 3.5-1.9 3 0 3.8 2 3.8 4.5V20h-3.4v-5.5c0-1.3-.3-2.3-1.7-2.3s-2 1-2 2.4V20H10z"/>' },
+    { id: 'telegram', label: 'Telegram', ph: '@username or link', p: '<path d="M21 4L3 11l6 2 2 6 3-4 5 3z"/>' },
+    { id: 'email', label: 'Email', ph: 'you@email.com', p: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>' },
+    { id: 'website', label: 'Website', ph: 'yoursite.com', p: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>' }
+  ];
+  LH.socialMap = {}; LH.socialPlatforms.forEach(function (x) { LH.socialMap[x.id] = x; });
+  LH.socialIcon = function (id, color, size) {
+    var x = LH.socialMap[id]; if (!x) return '';
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (x.fill ? color : 'none') + '" stroke="' + (x.fill ? 'none' : color) + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + x.p + '</svg>';
+  };
+  LH.socialHtml = function (list, color, size) {
+    return (list || []).filter(function (s) { return LH.socialMap[s.platform] && /^(https?:|mailto:|tel:)/i.test(s.url); }).map(function (s) {
+      return '<a href="' + LH.esc(s.url) + '" target="_blank" rel="noopener noreferrer nofollow" aria-label="' + LH.esc(LH.socialMap[s.platform].label) + '" style="display:flex;color:' + color + '">' + LH.socialIcon(s.platform, color, size) + '</a>';
+    }).join('');
+  };
+  LH.socialBuild = function (id, v) {
+    v = (v || '').trim(); if (!v) return '';
+    if (id === 'email') { v = v.replace(/^mailto:/i, ''); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? 'mailto:' + v : ''; }
+    if (id === 'whatsapp' && /^\+?[\d\s\-()]{7,}$/.test(v)) return 'https://wa.me/' + v.replace(/\D/g, '');
+    if (v.indexOf('/') < 0 && (v.charAt(0) === '@' || v.indexOf('.') < 0)) {
+      var h = v.replace(/^@/, '');
+      if (!/^[A-Za-z0-9_.\-]{1,60}$/.test(h)) return '';
+      var base = { instagram: 'https://instagram.com/', tiktok: 'https://www.tiktok.com/@', x: 'https://x.com/', youtube: 'https://youtube.com/@', facebook: 'https://facebook.com/', linkedin: 'https://www.linkedin.com/in/', telegram: 'https://t.me/' }[id];
+      if (base) return base + h;
+    }
+    var u = LH.normUrl(v); return /^https?:/i.test(u) ? u : '';
+  };
+
+  // Show / Hide buttons next to password fields
+  document.querySelectorAll('button').forEach(function (b) {
+    if (b.textContent.trim() === 'Show') b.addEventListener('click', function () {
+      var i = b.parentElement.querySelector('input'); if (!i) return;
+      var show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.textContent = show ? 'Hide' : 'Show';
+    });
+  });
+  // Password reset links land on the home page with a token in the address: forward them
+  if (/type=recovery/.test(location.hash) && !/reset-password/.test(location.pathname)) location.replace('reset-password.html' + location.hash);
+})();
+</script>
+<script>
+(function () {
+  var S = LH.session();
+  if (!S) { location.replace('login.html'); return; }
+  var app = LH.$('app'), esc = LH.esc, stats = null, users = null, fbF = 'all', rpF = 'open', q = '';
+  var GL = 'background:rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.95);box-shadow:0 16px 40px rgba(10,61,31,0.10);backdrop-filter:blur(14px);';
+  var H = "font-family:'Bricolage Grotesque',sans-serif;font-weight:800;";
+  var INP = 'box-sizing:border-box;background:rgba(255,255,255,0.9);border:1px solid #C3D6C7;border-radius:16px;padding:12px 16px;font-family:inherit;font-size:16px;color:#07281A;outline:0';
+  var NAV = [['overview', 'Overview'], ['users', 'Users'], ['feedback', 'Feedback'], ['reports', 'Reports'], ['waitlist', 'Waitlist']];
+  function when(x) { return x ? new Date(x).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Never'; }
+  function toast(m) { var t = document.createElement('div'); t.textContent = m; t.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#07281A;color:#F2F5EE;padding:12px 22px;border-radius:999px;font-weight:600;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,0.3)'; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 3500); }
+  function fail(e) { toast(LH.friendly(e)); }
+  function tab() { var t = (location.hash || '#overview').slice(1); return NAV.some(function (n) { return n[0] === t; }) ? t : 'overview'; }
+  function chip(t, on, attr) { return '<button ' + attr + ' style="border:' + (on ? '0' : '1px solid #C3D6C7') + ';cursor:pointer;padding:8px 16px;border-radius:999px;font-family:inherit;font-size:15px;font-weight:600;background:' + (on ? '#07281A' : 'rgba(255,255,255,0.85)') + ';color:' + (on ? '#F2F5EE' : '#07281A') + '">' + t + '</button>'; }
+  function btn(t, act, id, danger) { return '<button data-act="' + act + '" data-id="' + esc(id) + '" style="cursor:pointer;padding:9px 16px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:600;background:transparent;border:2px solid ' + (danger ? '#C23A22' : '#07281A') + ';color:' + (danger ? '#C23A22' : '#07281A') + '">' + t + '</button>'; }
+  function tag(t, bg, col) { return '<span style="display:inline-block;padding:3px 12px;border-radius:999px;font-size:13px;font-weight:600;background:' + bg + ';color:' + (col || '#07281A') + '">' + esc(t) + '</span>'; }
+  function card(inner) { return '<div style="' + GL + 'border-radius:24px;padding:20px 24px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box">' + inner + '</div>'; }
+  function empty(t) { return '<div style="' + GL + 'border-radius:24px;padding:36px;text-align:center;color:#3B5A45">' + t + '</div>'; }
+  function pageUrl(h) { return LH.pageUrl(h); }
+
+  function frame(title, sub, inner) {
+    var nav = NAV.map(function (n) {
+      var on = tab() === n[0], c = n[0] === 'reports' ? (stats && stats.open_reports) : (n[0] === 'feedback' ? (stats && stats.unread_feedback) : 0);
+      return '<a href="#' + n[0] + '" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-radius:18px;font-weight:' + (on ? '600' : '500') + ';text-decoration:none;color:' + (on ? '#F2F5EE' : '#07281A') + ';background:' + (on ? '#07281A' : 'transparent') + '"><span>' + n[1] + '</span>' + (c ? '<span style="background:#B2F11B;color:#07281A;border-radius:999px;padding:1px 10px;font-size:13px;font-weight:700">' + c + '</span>' : '') + '</a>';
+    }).join('');
+    app.innerHTML = '<div style="position:relative;z-index:1;max-width:1360px;margin:0 auto;padding:32px;display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap">'
+      + '<div style="flex:1 1 220px;max-width:260px;' + GL + 'border-radius:32px;padding:28px 20px;display:flex;flex-direction:column;gap:24px;box-sizing:border-box;min-height:640px"><div style="padding:0 8px;' + H + 'font-size:26px;letter-spacing:-0.02em">Linkhaven<div style="font-family:Figtree,sans-serif;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#1E7A32">Admin</div></div><div style="display:flex;flex-direction:column;gap:6px">' + nav + '</div><div style="flex:1"></div>'
+      + '<a href="dashboard.html" style="padding:12px 18px;border-radius:18px;font-weight:500;text-decoration:none;color:#07281A">← Back to dashboard</a><a href="#" data-act="logout" style="padding:12px 18px;border-radius:18px;font-weight:500;text-decoration:none;color:#C23A22">Log out</a></div>'
+      + '<div style="flex:3 1 520px;min-width:0;display:flex;flex-direction:column;gap:20px"><div><h1 style="margin:0;' + H + 'font-size:44px;letter-spacing:-0.02em">' + title + '</h1><p style="margin:4px 0 0;color:#3B5A45">' + sub + '</p></div>' + inner + '</div></div>';
+  }
+  function deny(e) {
+    var setup = e && e.status === 404;
+    app.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box"><div style="' + GL + 'border-radius:32px;padding:40px;max-width:460px;text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center"><div style="' + H + 'font-size:32px">Admins only</div><div style="color:#3B5A45">' + (setup ? 'Admin setup is not finished yet. Run the fourth SQL file in Supabase.' : 'Your account does not have admin access.') + '</div><a href="dashboard.html" style="margin-top:6px;background:linear-gradient(180deg,#D4FF4A,#9BE21A);box-shadow:0 0 0 2px #7CCB12;padding:14px 26px;border-radius:999px;font-weight:600;text-decoration:none;color:#07281A">Go to my dashboard</a></div></div>';
+  }
+  function loadStats() { return LH.rest('POST', 'rpc/admin_stats', {}).then(function (s) { stats = s; }); }
+  function loadUsers() { return LH.rest('POST', 'rpc/admin_users', { p_limit: 500, p_offset: 0 }).then(function (u) { users = u || []; }); }
+
+  // ---------- views ----------
+  function overview() {
+    var items = [['Users', stats.users, 'users'], ['New this week', stats.new_users_7d, 'users'], ['Links', stats.links, ''], ['Page views (7d)', stats.views_7d, ''], ['Link clicks (7d)', stats.clicks_7d, ''], ['Open reports', stats.open_reports, 'reports'], ['Unread feedback', stats.unread_feedback, 'feedback'], ['Waitlist', stats.waitlist, 'waitlist']];
+    var cards = items.map(function (i) { return '<' + (i[2] ? 'a href="#' + i[2] + '"' : 'div') + ' style="flex:1 1 200px;' + GL + 'border-radius:24px;padding:20px 24px;display:flex;flex-direction:column;gap:2px;text-decoration:none;color:#07281A;box-sizing:border-box"><div style="font-size:14px;font-weight:600;color:#3B5A45">' + i[0] + '</div><div style="' + H + 'font-size:38px;line-height:1.1">' + (i[1] || 0) + '</div></' + (i[2] ? 'a' : 'div') + '>'; }).join('');
+    return loadUsers().then(function () {
+      var latest = users.slice(0, 6).map(userRow).join('') || empty('No users yet.');
+      frame('Overview', 'How Linkhaven is doing right now.', '<div style="display:flex;gap:16px;flex-wrap:wrap">' + cards + '</div><div style="' + H + 'font-size:24px;margin-top:8px">Latest signups</div><div style="display:flex;flex-direction:column;gap:12px">' + latest + '</div>');
+    });
+  }
+  function userRow(u) {
+    return card('<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div style="flex:1 1 220px;min-width:0"><div style="font-weight:600;font-size:18px;overflow-wrap:anywhere">@' + esc(u.handle) + (u.display_name ? ' · ' + esc(u.display_name) : '') + ' ' + (u.suspended ? tag('Suspended', '#FFD9CF', '#C23A22') : '') + '</div><div style="font-size:14px;color:#3B5A45;overflow-wrap:anywhere">' + esc(u.email) + '</div></div>'
+      + '<div style="font-size:14px;color:#3B5A45;flex:1 1 200px">Joined ' + when(u.created_at) + '<br>Last login ' + when(u.last_sign_in_at) + '<br>' + (u.links_count || 0) + ' links</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap"><a href="' + esc(pageUrl(u.handle)) + '" target="_blank" rel="noopener" style="padding:9px 16px;border-radius:999px;font-size:14px;font-weight:600;border:2px solid #07281A;text-decoration:none;color:#07281A">View page</a>' + btn(u.suspended ? 'Unsuspend' : 'Suspend', 'suspend', u.id) + btn('Delete', 'deluser', u.id, true) + '</div></div>');
+  }
+  function usersView() {
+    return (users ? Promise.resolve() : loadUsers()).then(function () {
+      var f = users.filter(function (u) { var s = (u.handle + ' ' + (u.display_name || '') + ' ' + (u.email || '')).toLowerCase(); return !q || s.indexOf(q.toLowerCase()) > -1; });
+      frame('Users', users.length + ' people have signed up.', '<input id="q" type="search" placeholder="Search by handle, name or email" value="' + esc(q) + '" style="' + INP + ';width:100%;max-width:420px"><div id="list" style="display:flex;flex-direction:column;gap:12px">' + (f.map(userRow).join('') || empty('No one matches that search.')) + '</div>');
+      var i = LH.$('q'); if (i) { i.addEventListener('input', function () { q = i.value; var f2 = users.filter(function (u) { var s = (u.handle + ' ' + (u.display_name || '') + ' ' + (u.email || '')).toLowerCase(); return !q || s.indexOf(q.toLowerCase()) > -1; }); LH.$('list').innerHTML = f2.map(userRow).join('') || empty('No one matches that search.'); }); }
+    });
+  }
+  var KIND = { broke: ['Something broke', '#FFD9CF'], idea: ['Idea', '#FFE9A8'], love: ['Loved it', '#DDF7AE'], confusing: ['Confusing', '#E1E6F5'] };
+  function feedbackView() {
+    return LH.rest('GET', 'feedback?select=*&order=created_at.desc&limit=500').then(function (rows) {
+      var f = rows.filter(function (r) { return fbF === 'all' || (fbF === 'unread' ? !r.is_read : r.kind === fbF); });
+      var chips = [['all', 'All'], ['unread', 'Unread'], ['broke', 'Broke'], ['idea', 'Ideas'], ['love', 'Loved'], ['confusing', 'Confusing']].map(function (c) { return chip(c[1], fbF === c[0], 'data-fb="' + c[0] + '"'); }).join('');
+      var list = f.map(function (r) {
+        var k = KIND[r.kind] || ['General', '#DDE9D3'];
+        return card('<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">' + tag(k[0], k[1]) + (r.rating ? tag('Ease ' + r.rating + '/5', '#DDE9D3') : '') + (r.is_read ? '' : tag('New', '#B2F11B')) + '<span style="font-size:14px;color:#3B5A45">' + when(r.created_at) + '</span></div>'
+          + '<div style="white-space:pre-wrap;overflow-wrap:anywhere">' + esc(r.message) + '</div><div style="font-size:14px;color:#3B5A45;overflow-wrap:anywhere">' + (r.contact_email ? 'Reply to: <a href="mailto:' + esc(r.contact_email) + '" style="color:#1E7A32;font-weight:600">' + esc(r.contact_email) + '</a> · ' : 'No reply address · ') + 'Page: ' + esc(r.page || '-') + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap">' + btn(r.is_read ? 'Mark unread' : 'Mark read', 'fbread', r.id) + btn('Delete', 'fbdel', r.id, true) + '</div>');
+      }).join('') || empty('Nothing here yet.');
+      frame('Feedback', rows.length + ' messages from testers.', '<div style="display:flex;gap:8px;flex-wrap:wrap">' + chips + '</div><div style="display:flex;flex-direction:column;gap:12px">' + list + '</div>');
+      window.__fb = rows;
+    });
+  }
+  function handleOf(s) {
+    s = (s || '').trim(); var m = s.match(/[?&]h=([A-Za-z0-9_.\-]+)/); if (m) return m[1].toLowerCase();
+    s = s.replace(/^https?:\/\//, '').split(/[?#]/)[0]; var p = s.split('/').filter(Boolean); return (p[p.length - 1] || '').replace(/^@/, '').toLowerCase();
+  }
+  var REASON = { phishing: 'Phishing or scam', malware: 'Malware', impersonation: 'Impersonation', harassment: 'Harassment or hate', illegal: 'Illegal content', other: 'Other' };
+  function reportsView() {
+    return LH.rest('GET', 'reports?select=*&order=created_at.desc&limit=500').then(function (rows) {
+      var f = rows.filter(function (r) { return rpF === 'all' || r.status === rpF; });
+      var chips = [['open', 'Open'], ['actioned', 'Actioned'], ['dismissed', 'Dismissed'], ['all', 'All']].map(function (c) { return chip(c[1], rpF === c[0], 'data-rp="' + c[0] + '"'); }).join('');
+      var list = f.map(function (r) {
+        var h = handleOf(r.page_handle);
+        return card('<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">' + tag(REASON[r.reason] || r.reason, '#FFD9CF', '#C23A22') + tag(r.status, r.status === 'open' ? '#FFE9A8' : '#DDE9D3') + '<span style="font-size:14px;color:#3B5A45">' + when(r.created_at) + '</span></div>'
+          + '<div style="font-weight:600;overflow-wrap:anywhere">Reported: ' + esc(r.page_handle) + (h ? ' <a href="' + esc(pageUrl(h)) + '" target="_blank" rel="noopener" style="color:#1E7A32">open page</a>' : '') + '</div>'
+          + (r.details ? '<div style="white-space:pre-wrap;overflow-wrap:anywhere">' + esc(r.details) + '</div>' : '') + '<div style="font-size:14px;color:#3B5A45">Reporter: ' + esc(r.reporter_email || 'not given') + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap">' + (h ? btn('Suspend page', 'rpsuspend', r.id, true) : '') + btn('Dismiss', 'rpdismiss', r.id) + btn('Mark actioned', 'rpaction', r.id) + btn('Delete', 'rpdel', r.id) + '</div>');
+      }).join('') || empty('No reports here. Nice.');
+      frame('Reports', 'Pages people have flagged as harmful.', '<div style="display:flex;gap:8px;flex-wrap:wrap">' + chips + '</div><div style="display:flex;flex-direction:column;gap:12px">' + list + '</div>');
+      window.__rp = rows;
+    });
+  }
+  function waitlistView() {
+    return LH.rest('GET', 'waitlist?select=*&order=created_at.desc&limit=1000').then(function (rows) {
+      window.__wl = rows;
+      var list = rows.map(function (r) { return card('<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><div style="font-weight:600;overflow-wrap:anywhere">' + esc(r.email) + '</div><div style="font-size:14px;color:#3B5A45">' + when(r.created_at) + '</div></div>' + btn('Remove', 'wldel', r.id, true) + '</div>'); }).join('') || empty('No one on the Pro waitlist yet.');
+      frame('Waitlist', rows.length + ' people want Pro.', '<div style="display:flex;gap:10px;flex-wrap:wrap">' + btn('Copy all emails', 'wlcopy', '0') + btn('Download CSV', 'wlcsv', '0') + '</div><div style="display:flex;flex-direction:column;gap:12px">' + list + '</div>');
+    });
+  }
+  function render() {
+    var t = tab(), p = loadStats().then(function () { return ({ overview: overview, users: usersView, feedback: feedbackView, reports: reportsView, waitlist: waitlistView })[t](); });
+    p.catch(function (e) { if (e && (e.status === 403 || /not allowed/i.test(e.message))) deny(e); else { frame('Something went wrong', '', '<div style="color:#C23A22;font-weight:600">' + esc(LH.friendly(e)) + '</div>'); } });
+  }
+
+  // ---------- actions ----------
+  function find(arr, id) { return (arr || []).filter(function (x) { return String(x.id) === String(id); })[0]; }
+  app.addEventListener('click', function (e) {
+    var fb = e.target.closest('[data-fb]'), rp = e.target.closest('[data-rp]'), b = e.target.closest('[data-act]');
+    if (fb) { fbF = fb.getAttribute('data-fb'); return render(); }
+    if (rp) { rpF = rp.getAttribute('data-rp'); return render(); }
+    if (!b) return;
+    var act = b.getAttribute('data-act'), id = b.getAttribute('data-id'), r;
+    if (act === 'logout') { e.preventDefault(); return LH.signOut().then(function () { location.href = 'index.html'; }); }
+    if (act === 'suspend') { var u = find(users, id), to = !u.suspended; if (!confirm((to ? 'Suspend ' : 'Restore ') + '@' + u.handle + '?')) return; LH.rest('PATCH', 'profiles?id=eq.' + id, { suspended: to }).then(function () { u.suspended = to; toast(to ? 'Page suspended.' : 'Page restored.'); render(); }).catch(fail); }
+    if (act === 'deluser') { var d = find(users, id); if (!confirm('Delete @' + d.handle + ' (' + d.email + ') and everything they made? This cannot be undone.')) return; LH.rest('POST', 'rpc/admin_delete_user', { p_user: id }).then(function () { users = users.filter(function (x) { return x.id !== id; }); toast('User deleted.'); render(); }).catch(fail); }
+    if (act === 'fbread') { r = find(window.__fb, id); LH.rest('PATCH', 'feedback?id=eq.' + id, { is_read: !r.is_read }).then(render).catch(fail); }
+    if (act === 'fbdel') { if (confirm('Delete this message?')) LH.rest('DELETE', 'feedback?id=eq.' + id).then(render).catch(fail); }
+    if (act === 'rpdismiss' || act === 'rpaction') LH.rest('PATCH', 'reports?id=eq.' + id, { status: act === 'rpdismiss' ? 'dismissed' : 'actioned' }).then(render).catch(fail);
+    if (act === 'rpdel') { if (confirm('Delete this report?')) LH.rest('DELETE', 'reports?id=eq.' + id).then(render).catch(fail); }
+    if (act === 'rpsuspend') {
+      r = find(window.__rp, id); var h = handleOf(r.page_handle);
+      if (!confirm('Suspend the page @' + h + '? Visitors will see it as unavailable.')) return;
+      LH.rest('PATCH', 'profiles?handle=eq.' + encodeURIComponent(h), { suspended: true }, 'return=representation').then(function (a) {
+        if (!a || !a.length) return toast('No page found for @' + h + '.');
+        return LH.rest('PATCH', 'reports?id=eq.' + id, { status: 'actioned' }).then(function () { users = null; toast('Page suspended.'); render(); });
+      }).catch(fail);
+    }
+    if (act === 'wldel') { if (confirm('Remove this email?')) LH.rest('DELETE', 'waitlist?id=eq.' + id).then(render).catch(fail); }
+    if (act === 'wlcopy') { LH.copy((window.__wl || []).map(function (x) { return x.email; }).join(', ')).then(function () { toast('Emails copied.'); }); }
+    if (act === 'wlcsv') {
+      var csv = 'email,joined\n' + (window.__wl || []).map(function (x) { return '"' + x.email.replace(/"/g, '""') + '",' + x.created_at; }).join('\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'linkhaven-waitlist.csv'; document.body.appendChild(a); a.click(); a.remove();
+    }
+    if (act === 'suspend' || act === 'deluser') users = users;
+  });
+  window.addEventListener('hashchange', render);
+  app.innerHTML = '<div style="padding:80px 0;text-align:center;color:#3B5A45">Checking access…</div>';
+  LH.rest('POST', 'rpc/is_admin', {}).then(function (ok) { if (ok !== true) return deny(); render(); }).catch(deny);
+})();
+</script>
+</body>
+</html>

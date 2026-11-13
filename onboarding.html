@@ -210,7 +210,7 @@ a:hover{opacity:.8}
     'Linkhaven': 'index.html',
     'Terms': 'legal.html#terms', 'Privacy': 'legal.html#privacy', 'Privacy Policy': 'legal.html#privacy',
     'Acceptable use': 'legal.html#acceptable-use', 'Report abuse': 'legal.html#report',
-    'Links': 'dashboard.html', 'Appearance': 'appearance.html', 'Analytics': 'analytics.html', 'Settings': 'settings.html'
+    'Features': 'index.html#features', 'How it works': 'index.html#how', 'Pricing': 'index.html#pricing', 'Links': 'dashboard.html', 'Appearance': 'appearance.html', 'Analytics': 'analytics.html', 'Settings': 'settings.html'
   };
   document.querySelectorAll('a').forEach(function (a) {
     var t = a.textContent.trim();
@@ -295,6 +295,7 @@ a:hover{opacity:.8}
   pick('lime-glow');
 
   var back = LH.btn('Back'); if (back) back.addEventListener('click', function () { history.back(); });
+  var dash = LH.btn('Go to my dashboard'); if (dash) dash.addEventListener('click', function () { location.href = 'dashboard.html'; });
 
   fin.addEventListener('click', function () {
     if (!profile) return LH.showErr(fin, 'Still loading your profile. Try again in a moment.');

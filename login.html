@@ -210,7 +210,7 @@ a:hover{opacity:.8}
     'Linkhaven': 'index.html',
     'Terms': 'legal.html#terms', 'Privacy': 'legal.html#privacy', 'Privacy Policy': 'legal.html#privacy',
     'Acceptable use': 'legal.html#acceptable-use', 'Report abuse': 'legal.html#report',
-    'Links': 'dashboard.html', 'Appearance': 'appearance.html', 'Analytics': 'analytics.html', 'Settings': 'settings.html'
+    'Features': 'index.html#features', 'How it works': 'index.html#how', 'Pricing': 'index.html#pricing', 'Links': 'dashboard.html', 'Appearance': 'appearance.html', 'Analytics': 'analytics.html', 'Settings': 'settings.html'
   };
   document.querySelectorAll('a').forEach(function (a) {
     var t = a.textContent.trim();
@@ -256,7 +256,7 @@ a:hover{opacity:.8}
   }
   go.addEventListener('click', submit);
   [em, pw].forEach(function (i) { i.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); }); });
-  var g = LH.btn('Continue with Google');
+  var g = [].slice.call(document.querySelectorAll('button')).filter(function (b) { return b.textContent.indexOf('Continue with Google') > -1; })[0];
   if (g) g.addEventListener('click', function () { LH.showErr(go, 'Google sign-in is not available yet. Use your email for now.'); });
 })();
 </script>

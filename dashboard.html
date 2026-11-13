@@ -203,11 +203,36 @@ a:hover{opacity:.8}
   LH.socialMap = {}; LH.socialPlatforms.forEach(function (x) { LH.socialMap[x.id] = x; });
   LH.socialIcon = function (id, color, size) {
     var x = LH.socialMap[id]; if (!x) return '';
-    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (x.fill ? color : 'none') + '" stroke="' + (x.fill ? 'none' : color) + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + x.p + '</svg>';
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (x.fill ? color : 'none') + '" stroke="' + (x.fill ? 'none' : color) + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" shape-rendering="geometricPrecision" aria-hidden="true">' + x.p + '</svg>';
   };
-  LH.socialHtml = function (list, color, size) {
+  LH.brand = { whatsapp: '#25D366', instagram: '#E4405F', tiktok: '#010101', x: '#000000', youtube: '#FF0000', facebook: '#1877F2', linkedin: '#0A66C2', telegram: '#26A5E4', email: '#5B6B7A', website: '#0F766E' };
+  LH.socialStyles = [['plain', 'Plain'], ['soft', 'Soft circle'], ['solid', 'Solid circle'], ['outline', 'Outline'], ['brand', 'Brand colors'], ['brand-outline', 'Brand outline']];
+  // true when the given TEXT colour is light, meaning the page behind it is dark
+  LH.onDark = function (hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return false;
+    var n = parseInt(m[1], 16);
+    return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 150;
+  };
+  // o: { style, color (page text colour), soc (soft circle fill), dark (page is dark), size }
+  LH.socialHtml = function (list, o) {
+    o = o || {};
+    var st = o.style || 'plain', size = o.size || 32, col = o.color || '#07281A', dark = !!o.dark, soc = o.soc || 'rgba(255,255,255,0.55)';
+    var d = Math.round(size * 1.45), g = Math.round(size * 0.72);
+    var lightGlyph = dark ? '#07281A' : '#F4F1E4';
     return (list || []).filter(function (s) { return LH.socialMap[s.platform] && /^(https?:|mailto:|tel:)/i.test(s.url); }).map(function (s) {
-      return '<a href="' + LH.esc(s.url) + '" target="_blank" rel="noopener noreferrer nofollow" aria-label="' + LH.esc(LH.socialMap[s.platform].label) + '" style="display:flex;color:' + color + '">' + LH.socialIcon(s.platform, color, size) + '</a>';
+      var b = LH.brand[s.platform] || col;
+      if (dark && (b === '#010101' || b === '#000000')) b = '#FFFFFF';
+      var bgcss = '', glyph = col, gs = g;
+      if (st === 'plain') { gs = size; }
+      else if (st === 'soft') { bgcss = 'background:' + soc + ';'; }
+      else if (st === 'solid') { bgcss = 'background:' + col + ';'; glyph = lightGlyph; }
+      else if (st === 'outline') { bgcss = 'border:2px solid ' + col + ';box-sizing:border-box;'; }
+      else if (st === 'brand') {
+        bgcss = 'background:' + (s.platform === 'instagram' ? 'linear-gradient(45deg,#FEDA75,#FA7E1E,#D62976,#962FBF,#4F5BD5)' : b) + ';';
+        glyph = b === '#FFFFFF' ? '#07281A' : '#FFFFFF';
+      } else if (st === 'brand-outline') { bgcss = 'border:2px solid ' + b + ';box-sizing:border-box;'; glyph = b; }
+      var box = st === 'plain' ? '' : 'width:' + d + 'px;height:' + d + 'px;border-radius:50%;' + bgcss;
+      return '<a href="' + LH.esc(s.url) + '" target="_blank" rel="noopener noreferrer nofollow" aria-label="' + LH.esc(LH.socialMap[s.platform].label) + '" style="display:flex;align-items:center;justify-content:center;color:' + glyph + ';' + box + '">' + LH.socialIcon(s.platform, glyph, gs) + '</a>';
     }).join('');
   };
   LH.socialBuild = function (id, v) {
@@ -330,7 +355,7 @@ a:hover{opacity:.8}
     var av = profile.avatar_url
       ? '<div style="width:78px;height:78px;border-radius:50%;border:3px solid #07281A;background:url(\'' + esc(profile.avatar_url) + '\') center/cover"></div>'
       : '<div style="width:78px;height:78px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#F2FF8A,#A7E61C);border:3px solid #07281A;display:flex;align-items:center;justify-content:center;' + H + 'font-size:34px">' + esc((n[0] || 'Y').toUpperCase()) + '</div>';
-    m.parentElement.innerHTML = av + '<div style="' + H + 'font-size:22px">' + esc(n) + '</div><div style="font-size:14px;margin-bottom:8px;text-align:center">' + esc(profile.bio || '') + '</div>' + (socials.length ? '<div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:8px">' + LH.socialHtml(socials, '#07281A', 22) + '</div>' : '') + pills + '<div style="margin-top:14px;font-size:12px;font-weight:600">Made with Linkhaven</div>';
+    m.parentElement.innerHTML = av + '<div style="' + H + 'font-size:22px">' + esc(n) + '</div><div style="font-size:14px;margin-bottom:8px;text-align:center">' + esc(profile.bio || '') + '</div>' + (socials.length ? '<div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:8px">' + LH.socialHtml(socials, { style: profile.social_style, color: '#07281A', soc: 'rgba(255,255,255,0.55)', size: 22 }) + '</div>' : '') + pills + '<div style="margin-top:14px;font-size:12px;font-weight:600">Made with Linkhaven</div>';
   }
   function setStat(label, value, sub) {
     var d = [].slice.call(document.querySelectorAll('div')).filter(function (x) { return x.children.length === 3 && x.children[0].textContent.trim() === label; })[0];
@@ -425,6 +450,12 @@ a:hover{opacity:.8}
     lo.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:18px;font-weight:500;color:#C23A22';
     lo.addEventListener('click', function (e) { e.preventDefault(); LH.signOut().then(function () { location.href = 'index.html'; }); });
     set.parentElement.appendChild(lo);
+    LH.rest('POST', 'rpc/is_admin', {}).then(function (ok) {
+      if (ok !== true) return;
+      var ad = document.createElement('a'); ad.href = 'admin.html'; ad.textContent = 'Admin';
+      ad.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:18px;font-weight:600;color:#1E7A32';
+      set.parentElement.insertBefore(ad, lo);
+    }).catch(function () {});
   }
   var addB = LH.btn('Add link'); if (addB) addB.addEventListener('click', function () { if (!draft) addNew(); });
   var wa = LH.btn('WhatsApp chat'); if (wa) wa.addEventListener('click', function () { if (!draft) addNew({ title: 'Chat on WhatsApp', url: 'https://wa.me/' }); });
