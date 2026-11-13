@@ -248,6 +248,31 @@ a:hover{opacity:.8}
     var u = LH.normUrl(v); return /^https?:/i.test(u) ? u : '';
   };
 
+  // ---- colours and custom themes ----
+  LH.lum = function (hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return 0;
+    var n = parseInt(m[1], 16), w = [0.2126, 0.7152, 0.0722];
+    return [n >> 16 & 255, n >> 8 & 255, n & 255].reduce(function (a, v, i) { v /= 255; v = v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); return a + v * w[i]; }, 0);
+  };
+  LH.contrast = function (a, b) { var x = LH.lum(a), y = LH.lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  LH.rgba = function (hex, a) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return 'rgba(0,0,0,' + a + ')';
+    var n = parseInt(m[1], 16); return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')';
+  };
+  LH.customTheme = function (c) {
+    return {
+      bg: c.bg2 ? 'linear-gradient(165deg,' + c.bg + ',' + c.bg2 + ')' : c.bg, tx: c.tx, btn: c.btn,
+      bt: LH.contrast(c.btn, '#07281A') >= LH.contrast(c.btn, '#FFFFFF') ? '#07281A' : '#FFFFFF',
+      bd: 'none', sh: '0 6px 14px rgba(0,0,0,0.18)', av: c.btn, ab: c.tx, soc: LH.rgba(c.tx, 0.16)
+    };
+  };
+  LH.themeFor = function (p, T) {
+    if (p && p.theme === 'custom' && /^#[0-9a-f]{6}$/i.test(p.custom_bg || '') && /^#[0-9a-f]{6}$/i.test(p.custom_btn || '') && /^#[0-9a-f]{6}$/i.test(p.custom_text || '')) {
+      return LH.customTheme({ bg: p.custom_bg, bg2: /^#[0-9a-f]{6}$/i.test(p.custom_bg2 || '') ? p.custom_bg2 : '', btn: p.custom_btn, tx: p.custom_text });
+    }
+    return T[p && p.theme] || T['lime-glow'];
+  };
+
   // Show / Hide buttons next to password fields
   document.querySelectorAll('button').forEach(function (b) {
     if (b.textContent.trim() === 'Show') b.addEventListener('click', function () {
@@ -269,6 +294,8 @@ a:hover{opacity:.8}
     'coral': { bg: 'linear-gradient(165deg,#FF9A7A 0%,#FF6B4A 50%,#E8543A 100%)', tx: '#07281A', btn: '#FFFFFF', bt: '#07281A', bd: 'none', sh: '0 6px 14px rgba(120,30,10,0.22)', av: 'radial-gradient(circle at 35% 30%,#FFF3C4,#FFC93C)', ab: '#07281A', soc: 'rgba(255,255,255,0.55)' },
     'paper': { bg: '#F4F1E4', tx: '#07281A', btn: '#FFFFFF', bt: '#07281A', bd: '1px solid #C9C3AE', sh: 'none', av: 'radial-gradient(circle at 35% 30%,#F2FF8A,#A7E61C)', ab: '#07281A', soc: 'rgba(7,40,26,0.08)' },
     'ocean': { bg: 'linear-gradient(165deg,#1D8FB8,#0E4A7A)', tx: '#FFFFFF', btn: 'rgba(255,255,255,0.18)', bt: '#FFFFFF', bd: '1px solid rgba(255,255,255,0.35)', sh: 'none', av: 'radial-gradient(circle at 35% 30%,#BDEBFF,#5CC0E6)', ab: '#FFFFFF', soc: 'rgba(255,255,255,0.18)' },
+    'lavender': { bg: 'linear-gradient(165deg,#C9B8FF 0%,#7A5CFF 100%)', tx: '#1B1240', btn: '#FFFFFF', bt: '#1B1240', bd: 'none', sh: '0 6px 14px rgba(60,30,160,0.25)', av: 'radial-gradient(circle at 35% 30%,#F3EEFF,#B79CFF)', ab: '#1B1240', soc: 'rgba(255,255,255,0.45)' },
+    'graphite': { bg: '#111418', tx: '#F5F5F5', btn: '#F5F5F5', bt: '#111418', bd: 'none', sh: 'none', av: 'radial-gradient(circle at 35% 30%,#FFFFFF,#9AA0A6)', ab: '#F5F5F5', soc: 'rgba(255,255,255,0.12)' },
     'sunset': { bg: 'linear-gradient(165deg,#FFB347,#FF5E62)', tx: '#07281A', btn: '#FFFFFF', bt: '#07281A', bd: 'none', sh: '0 6px 14px rgba(120,30,10,0.22)', av: 'radial-gradient(circle at 35% 30%,#FFF3C4,#FFC93C)', ab: '#07281A', soc: 'rgba(255,255,255,0.55)' }
   };
   function el(tag, css, text, attrs) {
@@ -296,7 +323,7 @@ a:hover{opacity:.8}
   }).catch(function () { notFound('We could not load this page. Please try again.'); });
 
   function render(p, ls, so) {
-    var t = T[p.theme] || T['lime-glow'], name = p.display_name || p.handle;
+    var t = LH.themeFor(p, T), name = p.display_name || p.handle;
     document.title = name + ' – Linkhaven';
     root.style.background = t.bg; root.style.color = t.tx;
     app.innerHTML = '';

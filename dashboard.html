@@ -248,6 +248,31 @@ a:hover{opacity:.8}
     var u = LH.normUrl(v); return /^https?:/i.test(u) ? u : '';
   };
 
+  // ---- colours and custom themes ----
+  LH.lum = function (hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return 0;
+    var n = parseInt(m[1], 16), w = [0.2126, 0.7152, 0.0722];
+    return [n >> 16 & 255, n >> 8 & 255, n & 255].reduce(function (a, v, i) { v /= 255; v = v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); return a + v * w[i]; }, 0);
+  };
+  LH.contrast = function (a, b) { var x = LH.lum(a), y = LH.lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  LH.rgba = function (hex, a) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return 'rgba(0,0,0,' + a + ')';
+    var n = parseInt(m[1], 16); return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')';
+  };
+  LH.customTheme = function (c) {
+    return {
+      bg: c.bg2 ? 'linear-gradient(165deg,' + c.bg + ',' + c.bg2 + ')' : c.bg, tx: c.tx, btn: c.btn,
+      bt: LH.contrast(c.btn, '#07281A') >= LH.contrast(c.btn, '#FFFFFF') ? '#07281A' : '#FFFFFF',
+      bd: 'none', sh: '0 6px 14px rgba(0,0,0,0.18)', av: c.btn, ab: c.tx, soc: LH.rgba(c.tx, 0.16)
+    };
+  };
+  LH.themeFor = function (p, T) {
+    if (p && p.theme === 'custom' && /^#[0-9a-f]{6}$/i.test(p.custom_bg || '') && /^#[0-9a-f]{6}$/i.test(p.custom_btn || '') && /^#[0-9a-f]{6}$/i.test(p.custom_text || '')) {
+      return LH.customTheme({ bg: p.custom_bg, bg2: /^#[0-9a-f]{6}$/i.test(p.custom_bg2 || '') ? p.custom_bg2 : '', btn: p.custom_btn, tx: p.custom_text });
+    }
+    return T[p && p.theme] || T['lime-glow'];
+  };
+
   // Show / Hide buttons next to password fields
   document.querySelectorAll('button').forEach(function (b) {
     if (b.textContent.trim() === 'Show') b.addEventListener('click', function () {
